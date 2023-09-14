@@ -77,6 +77,7 @@ import org.keycloak.models.UserModel;
 import org.keycloak.models.utils.FormMessage;
 import org.keycloak.protocol.oidc.OIDCLoginProtocol;
 import org.keycloak.rar.AuthorizationDetails;
+import org.keycloak.representations.idm.OAuth2ErrorRepresentation;
 import org.keycloak.services.Urls;
 import org.keycloak.services.messages.Messages;
 import org.keycloak.services.resources.LoginActionsService;
@@ -93,6 +94,7 @@ import org.keycloak.theme.freemarker.FreeMarkerProvider;
 import org.keycloak.userprofile.UserProfileContext;
 import org.keycloak.userprofile.UserProfileProvider;
 import org.keycloak.utils.MediaType;
+import org.keycloak.utils.MediaTypeMatcher;
 
 /**
  * @author <a href="mailto:sthorger@redhat.com">Stian Thorgersen</a>
@@ -684,6 +686,17 @@ public class FreeMarkerLoginFormsProvider implements LoginFormsProvider {
 
     @Override
     public Response createErrorPage(Response.Status status) {
+        // error handle for the none-Html request
+        if (!MediaTypeMatcher.isHtmlRequest(session.getContext().getRequestHeaders())) {
+            OAuth2ErrorRepresentation errorRep = new OAuth2ErrorRepresentation();
+            errorRep.setError(getFirstMessageUnformatted());
+
+            return Response.status(status)
+                    .type(MediaType.APPLICATION_JSON_TYPE)
+                    .entity(errorRep)
+                    .build();
+        }
+
         this.status = status;
         return createResponse(LoginFormsPages.ERROR);
     }
