@@ -63,8 +63,6 @@ public class Profile {
 
         WEB_AUTHN("W3C Web Authentication (WebAuthn)", Type.DEFAULT),
 
-        LEGACY_WELCOME("Disables the new 'welcome' theme, and restores the legacy version.", Type.DEPRECATED),
-
         CLIENT_POLICIES("Client configuration policies", Type.DEFAULT),
 
         CIBA("OpenID Connect Client Initiated Backchannel Authentication (CIBA)", Type.DEFAULT),
@@ -88,13 +86,20 @@ public class Profile {
 
         UPDATE_EMAIL("Update Email Action", Type.PREVIEW),
 
-        JS_ADAPTER("Host keycloak.js and keycloak-authz.js through the Keycloak sever", Type.DEFAULT),
+        JS_ADAPTER("Host keycloak.js and keycloak-authz.js through the Keycloak server", Type.DEFAULT),
 
         FIPS("FIPS 140-2 mode", Type.DISABLED_BY_DEFAULT),
 
         DPOP("OAuth 2.0 Demonstrating Proof-of-Possession at the Application Layer", Type.PREVIEW),
 
-        LINKEDIN_OAUTH("LinkedIn Social Identity Provider based on OAuth", Type.DEPRECATED);
+        LINKEDIN_OAUTH("LinkedIn Social Identity Provider based on OAuth", Type.DEPRECATED),
+
+        DEVICE_FLOW("OAuth 2.0 Device Authorization Grant", Type.DEFAULT),
+
+        TRANSIENT_USERS("Transient users for brokering", Type.EXPERIMENTAL),
+
+        MULTI_SITE("Multi-site support", Type.PREVIEW),
+        ;
 
         private final Type type;
         private final String label;

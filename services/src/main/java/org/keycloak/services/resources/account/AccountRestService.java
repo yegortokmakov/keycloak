@@ -80,11 +80,11 @@ import org.keycloak.services.managers.Auth;
 import org.keycloak.services.managers.UserConsentManager;
 import org.keycloak.services.messages.Messages;
 import org.keycloak.services.resources.account.resources.ResourcesService;
+import org.keycloak.services.resources.admin.UserProfileResource;
 import org.keycloak.services.util.ResolveRelative;
 import org.keycloak.storage.ReadOnlyException;
 import org.keycloak.theme.Theme;
 import org.keycloak.userprofile.AttributeMetadata;
-import org.keycloak.userprofile.AttributeValidatorMetadata;
 import org.keycloak.userprofile.Attributes;
 import org.keycloak.userprofile.UserProfile;
 import org.keycloak.userprofile.UserProfileContext;
@@ -92,6 +92,7 @@ import org.keycloak.userprofile.UserProfileProvider;
 import org.keycloak.userprofile.EventAuditingAttributeChangeListener;
 import org.keycloak.userprofile.ValidationException;
 import org.keycloak.userprofile.ValidationException.Error;
+import org.keycloak.utils.GroupUtils;
 import org.keycloak.validate.Validators;
 
 /**
@@ -153,7 +154,7 @@ public class AccountRestService {
         addReadableBuiltinAttributes(user, rep, profile.getAttributes().getReadable(true).keySet());
 
         if(userProfileMetadata == null || userProfileMetadata.booleanValue())
-            rep.setUserProfileMetadata(createUserProfileMetadata(profile));
+            rep.setUserProfileMetadata(UserProfileResource.createUserProfileMetadata(session, profile));
         
         return rep;
     }
@@ -173,37 +174,6 @@ public class AccountRestService {
         }
     }
 
-    private UserProfileMetadata createUserProfileMetadata(final UserProfile profile) {
-        Map<String, List<String>> am = profile.getAttributes().getReadable();
-        
-        if(am == null)
-            return null;
-        
-        List<UserProfileAttributeMetadata> attributes = am.keySet().stream()
-                                                          .map(name -> profile.getAttributes().getMetadata(name))
-                                                          .filter(Objects::nonNull)
-                                                          .sorted((a,b) -> Integer.compare(a.getGuiOrder(), b.getGuiOrder()))
-                                                          .map(sam -> toRestMetadata(sam, profile))
-                                                          .collect(Collectors.toList());  
-        return new UserProfileMetadata(attributes);
-    }
-
-    private UserProfileAttributeMetadata toRestMetadata(AttributeMetadata am, UserProfile profile) {
-        return new UserProfileAttributeMetadata(am.getName(), 
-                                                am.getAttributeDisplayName(), 
-                                                profile.getAttributes().isRequired(am.getName()), 
-                                                profile.getAttributes().isReadOnly(am.getName()), 
-                                                am.getAnnotations(), 
-                                                toValidatorMetadata(am));
-    }
-    
-    private Map<String, Map<String, Object>> toValidatorMetadata(AttributeMetadata am){
-        // we return only validators which are instance of ConfiguredProvider. Others are expected as internal.
-        return am.getValidators() == null ? null : am.getValidators().stream()
-                .filter(avm -> (Validators.validator(session, avm.getValidatorId()) instanceof ConfiguredProvider))
-                .collect(Collectors.toMap(AttributeValidatorMetadata::getValidatorId, AttributeValidatorMetadata::getValidatorConfig));
-    }
-    
     @Path("/")
     @POST
     @Consumes(MediaType.APPLICATION_JSON)
@@ -344,7 +314,7 @@ public class AccountRestService {
             throw ErrorResponse.error("No client with clientId: " + clientId + " found.", Response.Status.NOT_FOUND);
         }
 
-        UserConsentModel consent = session.users().getConsentByClient(realm, user.getId(), client.getId());
+        UserConsentModel consent = UserConsentManager.getConsentByClient(session, realm, user, client.getId());
         if (consent == null) {
             return Response.noContent().build();
         }
@@ -433,17 +403,17 @@ public class AccountRestService {
 
         try {
             UserConsentModel grantedConsent = createConsent(client, consent);
-            if (session.users().getConsentByClient(realm, user.getId(), client.getId()) == null) {
-                session.users().addConsent(realm, user.getId(), grantedConsent);
+            if (UserConsentManager.getConsentByClient(session, realm, user, client.getId()) == null) {
+                UserConsentManager.addConsent(session, realm, user, grantedConsent);
                 event.event(EventType.GRANT_CONSENT);
             } else {
-                session.users().updateConsent(realm, user.getId(), grantedConsent);
+                UserConsentManager.updateConsent(session, realm, user, grantedConsent);
                 event.event(EventType.UPDATE_CONSENT);
             }
             event.detail(Details.GRANTED_CLIENT,client.getClientId());
             String scopeString = grantedConsent.getGrantedClientScopes().stream().map(cs->cs.getName()).collect(Collectors.joining(" "));
             event.detail(Details.SCOPE, scopeString).success();
-            grantedConsent = session.users().getConsentByClient(realm, user.getId(), client.getId());
+            grantedConsent = UserConsentManager.getConsentByClient(session, realm, user, client.getId());
             return Response.ok(modelToRepresentation(grantedConsent)).build();
         } catch (IllegalArgumentException e) {
             throw ErrorResponse.error(e.getMessage(), Response.Status.BAD_REQUEST);
@@ -490,9 +460,10 @@ public class AccountRestService {
     @GET
     @NoCache
     @Produces(MediaType.APPLICATION_JSON)
+    //TODO GROUPS this isn't paginated
     public Stream<GroupRepresentation> groupMemberships(@QueryParam("briefRepresentation") @DefaultValue("true") boolean briefRepresentation) {
         auth.require(AccountRoles.VIEW_GROUPS);
-        return ModelToRepresentation.toGroupHierarchy(user, !briefRepresentation);
+        return user.getGroupsStream().map(g -> ModelToRepresentation.toRepresentation(g, !briefRepresentation));
     }
 
     @Path("/applications")
@@ -519,7 +490,7 @@ public class AccountRestService {
                 .collect(Collectors.toSet()));
 
         Map<String, UserConsentModel> consentModels = new HashMap<>();
-        clients.addAll(session.users().getConsentsStream(realm, user.getId())
+        clients.addAll(UserConsentManager.getConsentsStream(session, realm, user)
                 .peek(consent -> consentModels.put(consent.getClient().getClientId(), consent))
                 .map(UserConsentModel::getClient)
                 .collect(Collectors.toSet()));

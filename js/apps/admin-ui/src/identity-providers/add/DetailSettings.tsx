@@ -16,6 +16,7 @@ import { useMemo, useState } from "react";
 import { Controller, FormProvider, useForm } from "react-hook-form";
 import { useTranslation } from "react-i18next";
 import { Link, useNavigate } from "react-router-dom";
+import { ScrollForm } from "ui-shared";
 
 import { adminClient } from "../../admin-client";
 import { useAlerts } from "../../components/alert/Alerts";
@@ -30,7 +31,6 @@ import {
   RoutableTabs,
   useRoutableTab,
 } from "../../components/routable-tabs/RoutableTabs";
-import { ScrollForm } from "../../components/scroll-form/ScrollForm";
 import {
   Action,
   KeycloakDataTable,
@@ -92,7 +92,7 @@ const Header = ({ onChange, value, save, toggleDeleteDialog }: HeaderProps) => {
   );
 
   const [toggleDisableDialog, DisableConfirm] = useConfirmDialog({
-    titleKey: "identity-providers:disableProvider",
+    titleKey: "disableProvider",
     messageKey: t("disableConfirmIdentityProvider", { provider: displayName }),
     continueButtonLabel: "disable",
     onConfirm: () => {
@@ -256,7 +256,7 @@ export default function DetailSettings() {
   };
 
   const [toggleDeleteDialog, DeleteConfirm] = useConfirmDialog({
-    titleKey: "identity-providers:deleteProvider",
+    titleKey: "deleteProvider",
     messageKey: t("deleteConfirmIdentityProvider", { provider: alias }),
     continueButtonLabel: "delete",
     continueButtonVariant: ButtonVariant.danger,
@@ -272,8 +272,8 @@ export default function DetailSettings() {
   });
 
   const [toggleDeleteMapperDialog, DeleteMapperConfirm] = useConfirmDialog({
-    titleKey: "identity-providers:deleteProviderMapper",
-    messageKey: t("identity-providers:deleteMapperConfirm", {
+    titleKey: "deleteProviderMapper",
+    messageKey: t("deleteMapperConfirm", {
       mapper: selectedMapper?.name,
     }),
     continueButtonLabel: "delete",
@@ -425,7 +425,11 @@ export default function DetailSettings() {
             title={<TabTitleText>{t("settings")}</TabTitleText>}
             {...settingsTab}
           >
-            <ScrollForm className="pf-u-px-lg" sections={sections} />
+            <ScrollForm
+              label={t("jumpToSection")}
+              className="pf-u-px-lg"
+              sections={sections}
+            />
           </Tab>
           <Tab
             id="mappers"
@@ -436,9 +440,9 @@ export default function DetailSettings() {
             <KeycloakDataTable
               emptyState={
                 <ListEmptyState
-                  message={t("identity-providers:noMappers")}
-                  instructions={t("identity-providers:noMappersInstructions")}
-                  primaryActionText={t("identity-providers:addMapper")}
+                  message={t("noMappers")}
+                  instructions={t("noMappersInstructions")}
+                  primaryActionText={t("addMapper")}
                   onPrimaryAction={() =>
                     navigate(
                       toIdentityProviderAddMapper({
@@ -453,8 +457,8 @@ export default function DetailSettings() {
               }
               loader={loader}
               key={key}
-              ariaLabelKey="identity-providers:mappersList"
-              searchPlaceholderKey="identity-providers:searchForMapper"
+              ariaLabelKey="mappersList"
+              searchPlaceholderKey="searchForMapper"
               toolbarItem={
                 <ToolbarItem>
                   <Button

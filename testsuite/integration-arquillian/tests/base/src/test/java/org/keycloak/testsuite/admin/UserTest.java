@@ -597,14 +597,59 @@ public class UserTest extends AbstractAdminTest {
 
     @Test
     public void createUserWithEmailAsUsername() {
-        switchRegistrationEmailAsUsername(true);
+        RealmRepresentation realmRep = realm.toRepresentation();
+        Boolean registrationEmailAsUsername = realmRep.isRegistrationEmailAsUsername();
+        Boolean editUsernameAllowed = realmRep.isEditUsernameAllowed();
+        getCleanup().addCleanup(() -> {
+            realmRep.setRegistrationEmailAsUsername(registrationEmailAsUsername);
+            realm.update(realmRep);
+        });
+        getCleanup().addCleanup(() -> {
+            realmRep.setEditUsernameAllowed(editUsernameAllowed);
+            realm.update(realmRep);
+        });
 
+        switchRegistrationEmailAsUsername(true);
+        switchEditUsernameAllowedOn(false);
         String id = createUser();
         UserResource user = realm.users().get(id);
         UserRepresentation userRep = user.toRepresentation();
-        assertEquals("user1@localhost", userRep.getUsername());
+        assertEquals("user1@localhost", userRep.getEmail());
+        assertEquals(userRep.getEmail(), userRep.getUsername());
+        deleteUser(id);
+
+        switchRegistrationEmailAsUsername(true);
+        switchEditUsernameAllowedOn(true);
+        id = createUser();
+        user = realm.users().get(id);
+        userRep = user.toRepresentation();
+        assertEquals("user1@localhost", userRep.getEmail());
+        assertEquals(userRep.getEmail(), userRep.getUsername());
+        deleteUser(id);
 
         switchRegistrationEmailAsUsername(false);
+        switchEditUsernameAllowedOn(true);
+        id = createUser();
+        user = realm.users().get(id);
+        userRep = user.toRepresentation();
+        assertEquals("user1", userRep.getUsername());
+        assertEquals("user1@localhost", userRep.getEmail());
+        deleteUser(id);
+
+        switchRegistrationEmailAsUsername(false);
+        switchEditUsernameAllowedOn(false);
+        id = createUser();
+        user = realm.users().get(id);
+        userRep = user.toRepresentation();
+        assertEquals("user1", userRep.getUsername());
+        assertEquals("user1@localhost", userRep.getEmail());
+    }
+
+    private void deleteUser(String id) {
+        try (Response response = realm.users().delete(id)) {
+            assertEquals(204, response.getStatus());
+        }
+        assertAdminEvents.assertEvent(realmId, OperationType.DELETE, AdminEventPaths.userResourcePath(id), ResourceType.USER);
     }
 
     @Test
@@ -644,6 +689,22 @@ public class UserTest extends AbstractAdminTest {
             assertAdminEvents.assertEmpty();
             realm.update(rep);
         }
+    }
+
+    @Test
+    public void createUserWithCreateTimestamp() {
+        UserRepresentation user = new UserRepresentation();
+        user.setUsername("user1");
+        user.setEmail("user1@localhost");
+        Long createdTimestamp = 1695238476L;
+        user.setCreatedTimestamp(createdTimestamp);
+
+        String userId = createUser(user);
+
+        // fetch user again and see created timestamp filled in
+        UserRepresentation createdUser = realm.users().get(userId).toRepresentation();
+        assertNotNull(createdUser);
+        assertEquals(user.getCreatedTimestamp(), createdUser.getCreatedTimestamp());
     }
 
     private List<String> createUsers() {
@@ -1328,10 +1389,7 @@ public class UserTest extends AbstractAdminTest {
     @Test
     public void delete() {
         String userId = createUser();
-        try (Response response = realm.users().delete(userId)) {
-            assertEquals(204, response.getStatus());
-        }
-        assertAdminEvents.assertEvent(realmId, OperationType.DELETE, AdminEventPaths.userResourcePath(userId), ResourceType.USER);
+        deleteUser(userId);
     }
 
     @Test
@@ -2481,7 +2539,8 @@ public class UserTest extends AbstractAdminTest {
         updateUser(user, userRep);
 
         userRep = realm.users().get(id).toRepresentation();
-        assertEquals("user1@localhost", userRep.getUsername());
+        assertEquals("user11@localhost", userRep.getUsername());
+        assertEquals("user11@localhost", userRep.getEmail());
     }
 
     @Test
@@ -2501,6 +2560,7 @@ public class UserTest extends AbstractAdminTest {
 
         userRep = realm.users().get(id).toRepresentation();
         assertEquals("user11@localhost", userRep.getUsername());
+        assertEquals("user11@localhost", userRep.getEmail());
     }
 
     @Test
@@ -2563,12 +2623,23 @@ public class UserTest extends AbstractAdminTest {
 
     @Test
     public void updateUserWithNewUsernameNotPossible() {
+        RealmRepresentation realmRep = realm.toRepresentation();
+        assertFalse(realmRep.isEditUsernameAllowed());
         String id = createUser();
 
         UserResource user = realm.users().get(id);
         UserRepresentation userRep = user.toRepresentation();
         userRep.setUsername("user11");
-        updateUser(user, userRep);
+
+        try {
+            updateUser(user, userRep);
+            if (isDeclarativeUserProfile()) {
+                fail("Should fail because realm does not allow edit username");
+            }
+        } catch (BadRequestException expected) {
+            ErrorRepresentation error = expected.getResponse().readEntity(ErrorRepresentation.class);
+            assertEquals("error-user-attribute-read-only", error.getErrorMessage());
+        }
 
         userRep = realm.users().get(id).toRepresentation();
         assertEquals("user1", userRep.getUsername());
@@ -3019,7 +3090,7 @@ public class UserTest extends AbstractAdminTest {
         assertAdminEvents.assertEvent(realmId, OperationType.UPDATE, Matchers.nullValue(String.class), rep, ResourceType.REALM);
     }
 
-    private void switchRegistrationEmailAsUsername(boolean enable) {
+    protected void switchRegistrationEmailAsUsername(boolean enable) {
         RealmRepresentation rep = realm.toRepresentation();
         rep.setRegistrationEmailAsUsername(enable);
         realm.update(rep);

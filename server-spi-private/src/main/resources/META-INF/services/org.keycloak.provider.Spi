@@ -37,6 +37,7 @@ org.keycloak.exportimport.ImportSpi
 org.keycloak.timer.TimerSpi
 org.keycloak.scripting.ScriptingSpi
 org.keycloak.services.managers.BruteForceProtectorSpi
+org.keycloak.services.resource.AccountResourceSpi
 org.keycloak.services.resource.RealmResourceSPI
 org.keycloak.sessions.AuthenticationSessionSpi
 org.keycloak.sessions.StickySessionEncoderSpi
@@ -90,3 +91,4 @@ org.keycloak.services.clientpolicy.executor.ClientPolicyExecutorSpi
 org.keycloak.services.clientpolicy.ClientPolicyManagerSpi
 org.keycloak.userprofile.UserProfileSpi
 org.keycloak.device.DeviceRepresentationSpi
+org.keycloak.health.LoadBalancerCheckSpi

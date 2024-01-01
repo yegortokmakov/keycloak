@@ -1,12 +1,10 @@
 import type RealmRepresentation from "@keycloak/keycloak-admin-client/lib/defs/realmRepresentation";
 import { FormGroup, PageSection, Switch } from "@patternfly/react-core";
 import { useTranslation } from "react-i18next";
-import { HelpItem } from "ui-shared";
-
+import { FormPanel, HelpItem } from "ui-shared";
 import { adminClient } from "../admin-client";
 import { useAlerts } from "../components/alert/Alerts";
 import { FormAccess } from "../components/form/FormAccess";
-import { FormPanel } from "../components/scroll-form/FormPanel";
 import { useRealm } from "../context/realm-context/RealmContext";
 
 type RealmSettingsLoginTabProps = {
@@ -59,7 +57,7 @@ export const RealmSettingsLoginTab = ({
             labelIcon={
               <HelpItem
                 helpText={t("userRegistrationHelpText")}
-                fieldLabelId="realm-settings:registrationAllowed"
+                fieldLabelId="registrationAllowed"
               />
             }
             hasNoPaddingTop
@@ -82,8 +80,8 @@ export const RealmSettingsLoginTab = ({
             fieldId="kc-forgot-pw"
             labelIcon={
               <HelpItem
-                helpText={t("realm-settings:forgotPasswordHelpText")}
-                fieldLabelId="realm-settings:resetPasswordAllowed"
+                helpText={t("forgotPasswordHelpText")}
+                fieldLabelId="resetPasswordAllowed"
               />
             }
             hasNoPaddingTop
@@ -107,8 +105,8 @@ export const RealmSettingsLoginTab = ({
             fieldId="kc-remember-me"
             labelIcon={
               <HelpItem
-                helpText={t("realm-settings:rememberMeHelpText")}
-                fieldLabelId="realm-settings:rememberMe"
+                helpText={t("rememberMeHelpText")}
+                fieldLabelId="rememberMe"
               />
             }
             hasNoPaddingTop
@@ -135,8 +133,8 @@ export const RealmSettingsLoginTab = ({
             fieldId="kc-email-as-username"
             labelIcon={
               <HelpItem
-                helpText={t("realm-settings:emailAsUsernameHelpText")}
-                fieldLabelId="realm-settings:registrationEmailAsUsername"
+                helpText={t("emailAsUsernameHelpText")}
+                fieldLabelId="registrationEmailAsUsername"
               />
             }
             hasNoPaddingTop
@@ -166,8 +164,8 @@ export const RealmSettingsLoginTab = ({
             fieldId="kc-login-with-email"
             labelIcon={
               <HelpItem
-                helpText={t("realm-settings:loginWithEmailHelpText")}
-                fieldLabelId="realm-settings:loginWithEmailAllowed"
+                helpText={t("loginWithEmailHelpText")}
+                fieldLabelId="loginWithEmailAllowed"
               />
             }
             hasNoPaddingTop
@@ -195,8 +193,8 @@ export const RealmSettingsLoginTab = ({
             fieldId="kc-duplicate-emails"
             labelIcon={
               <HelpItem
-                helpText={t("realm-settings:duplicateEmailsHelpText")}
-                fieldLabelId="realm-settings:duplicateEmailsAllowed"
+                helpText={t("duplicateEmailsHelpText")}
+                fieldLabelId="duplicateEmailsAllowed"
               />
             }
             hasNoPaddingTop
@@ -227,8 +225,8 @@ export const RealmSettingsLoginTab = ({
             fieldId="kc-verify-email"
             labelIcon={
               <HelpItem
-                helpText={t("realm-settings:verifyEmailHelpText")}
-                fieldLabelId="realm-settings:verifyEmail"
+                helpText={t("verifyEmailHelpText")}
+                fieldLabelId="verifyEmail"
               />
             }
             hasNoPaddingTop
@@ -259,8 +257,8 @@ export const RealmSettingsLoginTab = ({
             fieldId="kc-edit-username"
             labelIcon={
               <HelpItem
-                helpText={t("realm-settings-help:editUsername")}
-                fieldLabelId="realm-settings:editUsernameAllowed"
+                helpText={t("editUsernameHelp")}
+                fieldLabelId="editUsernameAllowed"
               />
             }
             hasNoPaddingTop

@@ -8,7 +8,6 @@ import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.hasSize;
 import static org.keycloak.testsuite.auth.page.AuthRealm.TEST;
 
-import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
@@ -59,6 +58,7 @@ public class GroupSearchTest extends AbstractGroupTest {
     GroupRepresentation group3;
     GroupRepresentation parentGroup;
     GroupRepresentation childGroup;
+    GroupRepresentation secondChildGroup;
 
     @Before
     public void init() {
@@ -67,6 +67,7 @@ public class GroupSearchTest extends AbstractGroupTest {
         group3 = new GroupRepresentation();
         parentGroup = new GroupRepresentation();
         childGroup = new GroupRepresentation();
+        secondChildGroup = new GroupRepresentation();
 
         group1.setAttributes(new HashMap<>() {{
             put(ATTR_ORG_NAME, Collections.singletonList(ATTR_ORG_VAL));
@@ -83,7 +84,7 @@ public class GroupSearchTest extends AbstractGroupTest {
             put(ATTR_QUOTES_NAME, Collections.singletonList(ATTR_QUOTES_VAL));
         }});
 
-        childGroup.setAttributes(new HashMap<>() {{
+        parentGroup.setAttributes(new HashMap<>() {{
             put(ATTR_ORG_NAME, Collections.singletonList("parentOrg"));
         }});
 
@@ -96,6 +97,7 @@ public class GroupSearchTest extends AbstractGroupTest {
         group3.setName(GROUP3);
         parentGroup.setName(PARENT_GROUP);
         childGroup.setName(CHILD_GROUP);
+        secondChildGroup.setName(CHILD_GROUP + "2");
     }
 
     public RealmResource testRealmResource() {
@@ -230,14 +232,11 @@ public class GroupSearchTest extends AbstractGroupTest {
             System.setProperty(SEARCHABLE_ATTRS_PROP, String.join(",", searchableAttributes));
             controller.start(suiteContext.getAuthServerInfo().getQualifier());
         } else if (suiteContext.getAuthServerInfo().isQuarkus()) {
-            searchableAttributes = Arrays.stream(searchableAttributes)
-                    .map(a -> a.replace(" ", "\\ ").replace("\"", "\\\\\\\""))
-                    .toArray(String[]::new);
             String s = String.join(",", searchableAttributes);
             controller.stop(suiteContext.getAuthServerInfo().getQualifier());
             AbstractQuarkusDeployableContainer container = (AbstractQuarkusDeployableContainer) suiteContext.getAuthServerInfo().getArquillianContainer().getDeployableContainer();
             container.setAdditionalBuildArgs(
-                    Collections.singletonList("--spi-group-jpa-searchable-attributes=\"" + s + "\""));
+                    Collections.singletonList("--spi-group-jpa-searchable-attributes=" + s));
             controller.start(suiteContext.getAuthServerInfo().getQualifier());
         } else {
             throw new RuntimeException("Don't know how to config");

@@ -28,6 +28,7 @@ import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -57,7 +58,6 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import org.eclipse.microprofile.openapi.annotations.tags.Tag;
 import org.jboss.logging.Logger;
 import org.jboss.resteasy.annotations.cache.NoCache;
-import org.jboss.resteasy.spi.ResteasyProviderFactory;
 import org.keycloak.Config;
 import org.keycloak.KeyPairVerifier;
 import org.keycloak.authentication.CredentialRegistrator;
@@ -118,6 +118,7 @@ import org.keycloak.services.resources.admin.permissions.AdminPermissions;
 import org.keycloak.storage.DatastoreProvider;
 import org.keycloak.storage.ExportImportManager;
 import org.keycloak.storage.LegacyStoreSyncEvent;
+import org.keycloak.userprofile.DeclarativeUserProfileProvider;
 import org.keycloak.utils.ProfileHelper;
 import org.keycloak.utils.ReservedCharValidator;
 
@@ -384,6 +385,12 @@ public class RealmAdminResource {
 
             if (auth.users().canView()) {
                 rep.setRegistrationEmailAsUsername(realm.isRegistrationEmailAsUsername());
+                if (realm.getAttribute(DeclarativeUserProfileProvider.REALM_USER_PROFILE_ENABLED, Boolean.FALSE)) {
+                    // add the user profile attribute if enabled
+                    Map<String, String> attrs = Optional.ofNullable(rep.getAttributes()).orElse(new HashMap<>());
+                    attrs.put(DeclarativeUserProfileProvider.REALM_USER_PROFILE_ENABLED, Boolean.TRUE.toString());
+                    rep.setAttributes(attrs);
+                }
             }
 
             if (auth.realm().canViewIdentityProviders()) {
@@ -1074,13 +1081,13 @@ public class RealmAdminResource {
     @Tag(name = KeycloakOpenAPI.Admin.Tags.REALMS_ADMIN)
     @Operation()
     public GroupRepresentation getGroupByPath(@PathParam("path") String path) {
-        GroupModel found = KeycloakModelUtils.findGroupByPath(realm, path);
+        GroupModel found = KeycloakModelUtils.findGroupByPath(session, realm, path);
         if (found == null) {
             throw new NotFoundException("Group path does not exist");
 
         }
         auth.groups().requireView(found);
-        return ModelToRepresentation.toGroupHierarchy(found, true);
+        return ModelToRepresentation.toRepresentation(found, true);
     }
 
     /**
@@ -1153,7 +1160,7 @@ public class RealmAdminResource {
     @Operation( summary = "Partial export of existing realm into a JSON file.")
     public Response partialExport(@QueryParam("exportGroupsAndRoles") Boolean exportGroupsAndRoles,
                                                      @QueryParam("exportClients") Boolean exportClients) {
-        auth.realm().requireViewRealm();
+        auth.realm().requireManageRealm();
 
         boolean groupsAndRolesExported = exportGroupsAndRoles != null && exportGroupsAndRoles;
         boolean clientsExported = exportClients != null && exportClients;

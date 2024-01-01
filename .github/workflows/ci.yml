@@ -126,7 +126,10 @@ jobs:
     name: Quarkus UT
     needs: build
     timeout-minutes: 15
-    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        os: [ ubuntu-latest, windows-latest ]
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
 
@@ -182,7 +185,7 @@ jobs:
           PARAMS["sanity-check-zip"]="-Dtest=StartCommandDistTest,StartDevCommandDistTest,BuildAndStartDistTest,ImportAtStartupDistTest"
           PARAMS["zip"]=""
           PARAMS["container"]="-Dkc.quarkus.tests.dist=docker"
-          PARAMS["storage"]="-Ptest-database -Dtest=PostgreSQLDistTest,MariaDBDistTest#testSuccessful,MySQLDistTest#testSuccessful,DatabaseOptionsDistTest,JPAStoreDistTest,HotRodStoreDistTest,MixedStoreDistTest,TransactionConfigurationDistTest"
+          PARAMS["storage"]="-Ptest-database -Dtest=PostgreSQLDistTest,MariaDBDistTest#testSuccessful,MySQLDistTest#testSuccessful,DatabaseOptionsDistTest,JPAStoreDistTest,HotRodStoreDistTest,MixedStoreDistTest,TransactionConfigurationDistTest,ExternalInfinispanTest"
 
           ./mvnw install -pl quarkus/tests/integration -am -DskipTests
           ./mvnw test -pl quarkus/tests/integration ${PARAMS["${{ matrix.server }}"]} | misc/log/trimmer.sh
@@ -247,71 +250,6 @@ jobs:
         uses: ./.github/actions/archive-surefire-reports
         with:
           job-id: jdk-integration-tests-${{ matrix.os }}-${{ matrix.dist }}-${{ matrix.version }}
-
-  databases-new-store:
-    name: Databases New Store
-    runs-on: ubuntu-latest
-    needs: [conditional]
-    if: needs.conditional.outputs.ci-store == 'true'
-    steps:
-      - id: matrix-db
-        # language=bash
-        run: |
-          # For PRs, run only PostgreSQL, on branches and nightly runs run all databases
-          if [ "${{ github.event_name }}" == "pull_request" ]; then
-            echo 'db=["chm", "hot-rod", "jpa-postgres"]' >> $GITHUB_OUTPUT
-          else
-            echo 'db=["chm", "hot-rod", "jpa-postgres", "jpa-cockroach"]' >> $GITHUB_OUTPUT
-          fi
-    outputs:
-      db: ${{ steps.matrix-db.outputs.db }}
-
-  new-store-integration-tests:
-    name: New Store IT
-    needs: [conditional, build, databases-new-store]
-    if: needs.conditional.outputs.ci-store == 'true'
-    runs-on: ubuntu-latest
-    # Currently, the run of CockroachDB (only branches and nightly runs) is the longest with 50-60 minutes
-    timeout-minutes: 90
-    strategy:
-      matrix:
-        db: ${{ fromJson(needs.databases-new-store.outputs.db) }}
-      fail-fast: false
-    steps:
-      - uses: actions/checkout@v4
-
-      - id: integration-test-setup
-        name: Integration test setup
-        uses: ./.github/actions/integration-test-setup
-
-      - name: Run base tests
-        run: |
-          declare -A PARAMS
-          PARAMS["chm"]="-Pmap-storage-chm -Dpageload.timeout=90000"
-          PARAMS["hot-rod"]="-Pmap-storage-hot-rod -Dpageload.timeout=90000"
-          PARAMS["jpa-postgres"]="-Pmap-storage-jpa-postgres -Dpageload.timeout=90000"
-          PARAMS["jpa-cockroach"]="-Pmap-storage-jpa-cockroach -Dpageload.timeout=90000"
-
-          TESTS=`testsuite/integration-arquillian/tests/base/testsuites/suite.sh database`
-          echo "Tests: $TESTS"
-          ./mvnw test ${{ env.SUREFIRE_RETRY }} -Pauth-server-quarkus ${PARAMS["${{ matrix.db }}"]} -Dtest=$TESTS -pl testsuite/integration-arquillian/tests/base | misc/log/trimmer.sh
-
-      - name: Upload JVM Heapdumps
-        if: always()
-        uses: ./.github/actions/upload-heapdumps
-
-      - uses: ./.github/actions/upload-flaky-tests
-        name: Upload flaky tests
-        env:
-          GH_TOKEN: ${{ github.token }}
-        with:
-          job-name: New Store IT
-
-      - name: Surefire reports
-        if: always()
-        uses: ./.github/actions/archive-surefire-reports
-        with:
-          job-id: new-store-integration-tests-${{ matrix.db }}
 
   legacy-store-integration-tests:
     name: Legacy Store IT
@@ -506,7 +444,7 @@ jobs:
     timeout-minutes: 75
     strategy:
       matrix:
-        browser: [chrome, firefox]
+        browser: [chrome]
       fail-fast: false
     steps:
       - uses: actions/checkout@v4
@@ -516,7 +454,7 @@ jobs:
         uses: ./.github/actions/integration-test-setup
 
       - name: Run Account Console IT
-        run: ./mvnw test ${{ env.SUREFIRE_RETRY }} -Pauth-server-quarkus -Dtest=**.account2.**,!SigningInTest#passwordlessWebAuthnTest,!SigningInTest#twoFactorWebAuthnTest -Dbrowser=${{ matrix.browser }} "-Dwebdriver.chrome.driver=$CHROMEWEBDRIVER/chromedriver" "-Dwebdriver.gecko.driver=$GECKOWEBDRIVER/geckodriver" -f testsuite/integration-arquillian/tests/other/base-ui/pom.xml | misc/log/trimmer.sh
+        run: ./mvnw test ${{ env.SUREFIRE_RETRY }} -Pauth-server-quarkus -Dtest=**.account2.**,!SigningInTest#passwordlessWebAuthnTest,!SigningInTest#twoFactorWebAuthnTest -Dbrowser=${{ matrix.browser }} "-Dwebdriver.chrome.driver=$CHROMEWEBDRIVER/chromedriver" -f testsuite/integration-arquillian/tests/other/base-ui/pom.xml | misc/log/trimmer.sh
 
       - name: Upload JVM Heapdumps
         if: always()
@@ -711,7 +649,6 @@ jobs:
       - quarkus-unit-tests
       - quarkus-integration-tests
       - jdk-integration-tests
-      - new-store-integration-tests
       - legacy-store-integration-tests
       - store-model-tests
       - clustering-integration-tests

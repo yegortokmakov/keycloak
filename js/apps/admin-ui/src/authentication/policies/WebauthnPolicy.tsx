@@ -90,10 +90,7 @@ const WebauthnSelect = ({
     <FormGroup
       label={t(label)}
       labelIcon={
-        <HelpItem
-          helpText={t(`authentication-help:${label}`)}
-          fieldLabelId={`authentication:${label}`}
-        />
+        <HelpItem helpText={t(`${label}Help`)} fieldLabelId={label!} />
       }
       fieldId={name}
     >
@@ -194,7 +191,7 @@ export const WebauthnPolicy = ({
   return (
     <PageSection variant="light">
       {enabled && (
-        <Popover bodyContent={t(`authentication-help:${namePrefix}FormHelp`)}>
+        <Popover bodyContent={t(`${namePrefix}FormHelp`)}>
           <TextContent className="keycloak__section_intro__help">
             <Text>
               <QuestionCircleIcon /> {t("webauthnIntro")}
@@ -347,6 +344,22 @@ export const WebauthnPolicy = ({
               name={`${namePrefix}AcceptableAaguids`}
               aria-label={t("webAuthnPolicyAcceptableAaguids")}
               addButtonLabel="addAaguids"
+            />
+          </FormGroup>
+          <FormGroup
+            label={t("webAuthnPolicyExtraOrigins")}
+            fieldId="webAuthnPolicyExtraOrigins"
+            labelIcon={
+              <HelpItem
+                helpText={t("webAuthnPolicyExtraOriginsHelp")}
+                fieldLabelId="webAuthnPolicyExtraOrigins"
+              />
+            }
+          >
+            <MultiLineInput
+              name={`${namePrefix}ExtraOrigins`}
+              aria-label={t("webAuthnPolicyExtraOrigins")}
+              addButtonLabel="addOrigins"
             />
           </FormGroup>
         </FormProvider>

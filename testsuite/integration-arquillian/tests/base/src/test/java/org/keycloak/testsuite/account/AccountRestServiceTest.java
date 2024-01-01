@@ -54,6 +54,7 @@ import org.keycloak.representations.idm.AuthenticationFlowRepresentation;
 import org.keycloak.representations.idm.ClientScopeRepresentation;
 import org.keycloak.representations.idm.CredentialRepresentation;
 import org.keycloak.representations.idm.ErrorRepresentation;
+import org.keycloak.representations.idm.OAuth2ErrorRepresentation;
 import org.keycloak.representations.idm.ProtocolMapperRepresentation;
 import org.keycloak.representations.idm.RealmRepresentation;
 import org.keycloak.representations.idm.RequiredActionProviderRepresentation;
@@ -113,12 +114,14 @@ public class AccountRestServiceTest extends AbstractRestServiceTest {
             realmRep.setEditUsernameAllowed(true);
             realm.update(realmRep);
             user = getUser();
-            assertNotNull(user.getUserProfileMetadata());
-            // can write both username and email
-            assertUserProfileAttributeMetadata(user, "username", "${username}", true, false);
-            assertUserProfileAttributeMetadata(user, "email", "${email}", true, false);
-            assertUserProfileAttributeMetadata(user, "firstName", "${firstName}", true, false);
-            assertUserProfileAttributeMetadata(user, "lastName", "${lastName}", true, false);
+            if (isDeclarativeUserProfile()) {
+                assertNotNull(user.getUserProfileMetadata());
+                // can write both username and email
+                assertUserProfileAttributeMetadata(user, "username", "${username}", true, false);
+                assertUserProfileAttributeMetadata(user, "email", "${email}", true, false);
+                assertUserProfileAttributeMetadata(user, "firstName", "${firstName}", true, false);
+                assertUserProfileAttributeMetadata(user, "lastName", "${lastName}", true, false);
+            }
             user.setUsername("changed-username");
             user.setEmail("changed-email@keycloak.org");
             user = updateAndGet(user);
@@ -129,10 +132,12 @@ public class AccountRestServiceTest extends AbstractRestServiceTest {
             realmRep.setEditUsernameAllowed(false);
             realm.update(realmRep);
             user = getUser();
-            assertNotNull(user.getUserProfileMetadata());
-            // username is readonly but email is writable
-            assertUserProfileAttributeMetadata(user, "username", "${username}", true, true);
-            assertUserProfileAttributeMetadata(user, "email", "${email}", true, false);
+            if (isDeclarativeUserProfile()) {
+                assertNotNull(user.getUserProfileMetadata());
+                // username is readonly but email is writable
+                assertUserProfileAttributeMetadata(user, "username", "${username}", true, true);
+                assertUserProfileAttributeMetadata(user, "email", "${email}", true, false);
+            }
             user.setUsername("should-not-change");
             user.setEmail("changed-email@keycloak.org");
             updateError(user, 400, Messages.READ_ONLY_USERNAME);
@@ -141,10 +146,13 @@ public class AccountRestServiceTest extends AbstractRestServiceTest {
             realmRep.setEditUsernameAllowed(true);
             realm.update(realmRep);
             user = getUser();
-            assertNotNull(user.getUserProfileMetadata());
-            // username is read-only and is the same as email, but email is writable
-            assertUserProfileAttributeMetadata(user, "username", "${username}", true, true);
-            assertUserProfileAttributeMetadata(user, "email", "${email}", true, false);
+            if (isDeclarativeUserProfile()) {
+                assertNotNull(user.getUserProfileMetadata());
+                // username is read-only, not required, and is the same as email
+                // but email is writable
+                assertUserProfileAttributeMetadata(user, "username", "${username}", false, true);
+                assertUserProfileAttributeMetadata(user, "email", "${email}", true, false);
+            }
             user.setUsername("should-be-the-email");
             user.setEmail("user@keycloak.org");
             user = updateAndGet(user);
@@ -155,15 +163,36 @@ public class AccountRestServiceTest extends AbstractRestServiceTest {
             realmRep.setEditUsernameAllowed(false);
             realm.update(realmRep);
             user = getUser();
-            assertNotNull(user.getUserProfileMetadata());
-            // username is read-only and is the same as email, but email is read-only
-            assertUserProfileAttributeMetadata(user, "username", "${username}", true, true);
-            assertUserProfileAttributeMetadata(user, "email", "${email}", true, true);
+            if (isDeclarativeUserProfile()) {
+                assertNotNull(user.getUserProfileMetadata());
+                // username is read-only and is the same as email, but email is read-only
+                assertUserProfileAttributeMetadata(user, "username", "${username}", false, true);
+                assertUserProfileAttributeMetadata(user, "email", "${email}", true, true);
+            }
             user.setUsername("should-be-the-email");
             user.setEmail("should-not-change@keycloak.org");
             user = updateAndGet(user);
             assertEquals("user@keycloak.org", user.getUsername());
             assertEquals("user@keycloak.org", user.getEmail());
+
+            realmRep.setRegistrationEmailAsUsername(false);
+            realmRep.setEditUsernameAllowed(true);
+            realm.update(realmRep);
+            user = getUser();
+            user.setUsername("different-than-email");
+            user.setEmail("user@keycloak.org");
+            user = updateAndGet(user);
+            assertEquals("different-than-email", user.getUsername());
+            assertEquals("user@keycloak.org", user.getEmail());
+
+            realmRep.setRegistrationEmailAsUsername(true);
+            realmRep.setEditUsernameAllowed(false);
+            realm.update(realmRep);
+            user = getUser();
+            user.setEmail("should-not-change@keycloak.org");
+            user = updateAndGet(user);
+            assertEquals("user@keycloak.org", user.getEmail());
+            assertEquals(user.getEmail(), user.getUsername());
         } finally {
             realmRep.setRegistrationEmailAsUsername(registrationEmailAsUsername);
             realmRep.setEditUsernameAllowed(editUsernameAllowed);
@@ -189,24 +218,28 @@ public class AccountRestServiceTest extends AbstractRestServiceTest {
             realm.update(realmRep);
             
             UserRepresentation user = getUser();
-            assertNotNull(user.getUserProfileMetadata());
-            UserProfileAttributeMetadata upm = assertUserProfileAttributeMetadata(user, "username", "${username}", true, true);
-            //makes sure internal validators are not exposed
-            Assert.assertEquals(0,  upm.getValidators().size());
+            if (isDeclarativeUserProfile()) {
+                assertNotNull(user.getUserProfileMetadata());
+                UserProfileAttributeMetadata upm = assertUserProfileAttributeMetadata(user, "username", "${username}", true, true);
+                //makes sure internal validators are not exposed
+                Assert.assertEquals(0, upm.getValidators().size());
 
-            upm = assertUserProfileAttributeMetadata(user, "email", "${email}", true, false);
-            Assert.assertEquals(1,  upm.getValidators().size());
-            Assert.assertTrue(upm.getValidators().containsKey(EmailValidator.ID));
+                upm = assertUserProfileAttributeMetadata(user, "email", "${email}", true, false);
+                Assert.assertEquals(1, upm.getValidators().size());
+                Assert.assertTrue(upm.getValidators().containsKey(EmailValidator.ID));
+            }
 
             realmRep.setRegistrationEmailAsUsername(true);
             realm.update(realmRep);
             user = getUser();
-            upm = assertUserProfileAttributeMetadata(user, "email", "${email}", true, true);
-            Assert.assertEquals(1,  upm.getValidators().size());
-            Assert.assertTrue(upm.getValidators().containsKey(EmailValidator.ID));
+            if (isDeclarativeUserProfile()) {
+                UserProfileAttributeMetadata upm = assertUserProfileAttributeMetadata(user, "email", "${email}", true, true);
+                Assert.assertEquals(1, upm.getValidators().size());
+                Assert.assertTrue(upm.getValidators().containsKey(EmailValidator.ID));
 
-            assertUserProfileAttributeMetadata(user, "firstName", "${firstName}", true, false);
-            assertUserProfileAttributeMetadata(user, "lastName", "${lastName}", true, false);
+                assertUserProfileAttributeMetadata(user, "firstName", "${firstName}", true, false);
+                assertUserProfileAttributeMetadata(user, "lastName", "${lastName}", true, false);
+            }
         } finally {
             RealmRepresentation realmRep = testRealm().toRepresentation();
             realmRep.setEditUsernameAllowed(true);
@@ -599,7 +632,15 @@ public class AccountRestServiceTest extends AbstractRestServiceTest {
     protected void updateError(UserRepresentation user, int expectedStatus, String expectedMessage) throws IOException {
         SimpleHttp.Response response = SimpleHttp.doPost(getAccountUrl(null), httpClient).auth(tokenUtil.getToken()).json(user).asResponse();
         assertEquals(expectedStatus, response.getStatus());
-        assertEquals(expectedMessage, response.asJson(ErrorRepresentation.class).getErrorMessage());
+        ErrorRepresentation errorRep = response.asJson(ErrorRepresentation.class);
+        List<ErrorRepresentation> errors = errorRep.getErrors();
+
+        if (errors == null) {
+            assertEquals(expectedMessage, errorRep.getErrorMessage());
+        } else {
+            assertThat(errors.stream().map(ErrorRepresentation::getErrorMessage)
+                    .filter(expectedMessage::equals).collect(Collectors.toList()), containsInAnyOrder(expectedMessage));
+        }
     }
 
     @Test
@@ -831,16 +872,21 @@ public class AccountRestServiceTest extends AbstractRestServiceTest {
         AccountCredentialResource.CredentialContainer otpCredential = credentials.get(1);
         assertNull(otpCredential.getCreateAction());
         assertNull(otpCredential.getUpdateAction());
+        assertTrue(otpCredential.isRemoveable());
+
+        String otpCredentialId = otpCredential.getUserCredentialMetadatas().get(0).getCredential().getId();
+
+        // remove credential using account console as otp is removable
+        try (SimpleHttp.Response response = SimpleHttp
+                .doDelete(getAccountUrl("credentials/" + otpCredentialId), httpClient)
+                .acceptJson()
+                .auth(tokenUtil.getToken())
+                .asResponse()) {
+            assertEquals(204, response.getStatus());
+        }
 
         // Revert - re-enable requiredAction and remove OTP credential from the user
         setRequiredActionEnabledStatus(UserModel.RequiredAction.CONFIGURE_TOTP.name(), true);
-
-        String otpCredentialId = adminUserResource.credentials().stream()
-                .filter(credential -> OTPCredentialModel.TYPE.equals(credential.getType()))
-                .findFirst()
-                .get()
-                .getId();
-        adminUserResource.removeCredential(otpCredentialId);
     }
 
     private void setRequiredActionEnabledStatus(String requiredActionProviderId, boolean enabled) {
@@ -864,6 +910,20 @@ public class AccountRestServiceTest extends AbstractRestServiceTest {
         // We won't be able to authenticate later as user won't have password
         List<AccountCredentialResource.CredentialContainer> credentials = getCredentials();
 
+        // delete password should fail as it is not removable
+        AccountCredentialResource.CredentialContainer password = credentials.get(0);
+        assertCredentialContainerExpected(password, PasswordCredentialModel.TYPE, CredentialTypeMetadata.Category.BASIC_AUTHENTICATION.toString(),
+                "password-display-name", "password-help-text", "kcAuthenticatorPasswordClass",
+                null, UserModel.RequiredAction.UPDATE_PASSWORD.toString(), false, 1);
+        try (SimpleHttp.Response response = SimpleHttp
+                .doDelete(getAccountUrl("credentials/" + password.getUserCredentialMetadatas().get(0).getCredential().getId()), httpClient)
+                .acceptJson()
+                .auth(tokenUtil.getToken())
+                .asResponse()) {
+            assertEquals(400, response.getStatus());
+            Assert.assertEquals("Credential type password cannot be removed", response.asJson(OAuth2ErrorRepresentation.class).getError());
+        }
+
         // Remove password from the user now
         UserResource user = ApiUtil.findUserByUsernameId(testRealm(), "test-user@localhost");
         for (CredentialRepresentation credential : user.credentials()) {
@@ -874,7 +934,7 @@ public class AccountRestServiceTest extends AbstractRestServiceTest {
 
         // Get credentials. Ensure user doesn't have password credential and create action is UPDATE_PASSWORD
         credentials = getCredentials();
-        AccountCredentialResource.CredentialContainer password = credentials.get(0);
+        password = credentials.get(0);
         assertCredentialContainerExpected(password, PasswordCredentialModel.TYPE, CredentialTypeMetadata.Category.BASIC_AUTHENTICATION.toString(),
                 "password-display-name", "password-help-text", "kcAuthenticatorPasswordClass",
                 UserModel.RequiredAction.UPDATE_PASSWORD.toString(), null, false, 0);
@@ -1614,6 +1674,28 @@ public class AccountRestServiceTest extends AbstractRestServiceTest {
     }
 
     @Test
+    public void testCustomAccountResourceTheme() throws Exception {
+        String accountTheme = "";
+        try {
+            RealmRepresentation realmRep = adminClient.realm("test").toRepresentation();
+            accountTheme = realmRep.getAccountTheme();
+            realmRep.setAccountTheme("custom-account-provider");
+            adminClient.realm("test").update(realmRep);
+
+            SimpleHttp.Response response = SimpleHttp.doGet(getAccountUrl(null), httpClient)
+                       .header("Accept", "text/html")
+                       .asResponse();
+            assertEquals(200, response.getStatus());
+
+            String html = response.asString();
+            assertTrue(html.contains("Custom Account Console"));
+        } finally {
+            RealmRepresentation realmRep = testRealm().toRepresentation();
+            realmRep.setAccountTheme(accountTheme);
+            testRealm().update(realmRep);
+        }
+    }
+  
     @EnableFeature(Profile.Feature.UPDATE_EMAIL)
     public void testEmailWhenUpdateEmailEnabled() throws Exception {
         reconnectAdminClient();

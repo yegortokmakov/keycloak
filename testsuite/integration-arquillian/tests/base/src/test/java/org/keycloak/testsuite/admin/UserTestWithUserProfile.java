@@ -17,26 +17,31 @@
 
 package org.keycloak.testsuite.admin;
 
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.fail;
 
 import java.io.IOException;
-import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
 
-import org.jetbrains.annotations.Nullable;
+import jakarta.ws.rs.WebApplicationException;
 import org.junit.Before;
 import org.junit.Test;
 import org.keycloak.common.Profile.Feature;
-import org.keycloak.models.LDAPConstants;
+import org.keycloak.models.UserModel;
+import org.keycloak.representations.idm.ErrorRepresentation;
 import org.keycloak.representations.idm.UserProfileAttributeMetadata;
 import org.keycloak.representations.idm.UserProfileMetadata;
 import org.keycloak.representations.idm.RealmRepresentation;
 import org.keycloak.representations.idm.UserRepresentation;
 import org.keycloak.testsuite.arquillian.annotation.EnableFeature;
 import org.keycloak.testsuite.forms.VerifyProfileTest;
-import org.keycloak.userprofile.config.UPAttribute;
-import org.keycloak.userprofile.config.UPAttributePermissions;
-import org.keycloak.userprofile.config.UPConfig;
+import org.keycloak.representations.userprofile.config.UPAttribute;
+import org.keycloak.representations.userprofile.config.UPAttributePermissions;
+import org.keycloak.representations.userprofile.config.UPConfig;
 import org.keycloak.util.JsonSerialization;
 
 @EnableFeature(Feature.DECLARATIVE_USER_PROFILE)
@@ -53,7 +58,7 @@ public class UserTestWithUserProfile extends UserTest {
         realm.update(realmRep);
         assertAdminEvents.poll();
         VerifyProfileTest.setUserProfileConfiguration(realm, null);
-        UPConfig upConfig = JsonSerialization.readValue(realm.users().userProfile().getConfiguration(), UPConfig.class);
+        UPConfig upConfig = realm.users().userProfile().getConfiguration();
 
         for (String name : managedAttributes) {
             upConfig.addAttribute(createAttributeMetadata(name));
@@ -70,20 +75,42 @@ public class UserTestWithUserProfile extends UserTest {
         assertNotNull(metadata);
 
         for (String name : managedAttributes) {
-            assertNotNull(getAttributeMetadata(metadata, name));
+            assertNotNull(metadata.getAttributeMetadata(name));
         }
     }
 
-    @Nullable
-    private static UserProfileAttributeMetadata getAttributeMetadata(UserProfileMetadata metadata, String name) {
-        UserProfileAttributeMetadata attrMetadata = null;
+    @Test
+    public void testUsernameReadOnlyIfEmailAsUsernameEnabled() {
+        switchRegistrationEmailAsUsername(true);
+        getCleanup().addCleanup(() -> switchRegistrationEmailAsUsername(false));
+        String userId = createUser("user-metadata", "user-metadata@keycloak.org");
+        UserRepresentation user = realm.users().get(userId).toRepresentation(true);
+        UserProfileMetadata metadata = user.getUserProfileMetadata();
+        assertNotNull(metadata);
+        UserProfileAttributeMetadata username = metadata.getAttributeMetadata(UserModel.USERNAME);
+        assertNotNull(username);
+        assertTrue(username.isReadOnly());
+        UserProfileAttributeMetadata email = metadata.getAttributeMetadata(UserModel.EMAIL);
+        assertNotNull(email);
+        assertFalse(email.isReadOnly());
+    }
 
-        for (UserProfileAttributeMetadata m : metadata.getAttributes()) {
-            if (name.equals(m.getName())) {
-                attrMetadata = m;
-            }
-        }
-        return attrMetadata;
+    @Test
+    public void testEmailNotReadOnlyIfEmailAsUsernameEnabledAndEditUsernameDisabled() {
+        switchRegistrationEmailAsUsername(true);
+        getCleanup().addCleanup(() -> switchRegistrationEmailAsUsername(false));
+        RealmRepresentation rep = realm.toRepresentation();
+        assertFalse(rep.isEditUsernameAllowed());
+        String userId = createUser("user-metadata", "user-metadata@keycloak.org");
+        UserRepresentation user = realm.users().get(userId).toRepresentation(true);
+        UserProfileMetadata metadata = user.getUserProfileMetadata();
+        assertNotNull(metadata);
+        UserProfileAttributeMetadata username = metadata.getAttributeMetadata(UserModel.USERNAME);
+        assertNotNull(username);
+        assertTrue(username.isReadOnly());
+        UserProfileAttributeMetadata email = metadata.getAttributeMetadata(UserModel.EMAIL);
+        assertNotNull(email);
+        assertFalse(email.isReadOnly());
     }
 
     private UPAttribute createAttributeMetadata(String name) {
@@ -94,6 +121,22 @@ public class UserTestWithUserProfile extends UserTest {
         attribute.setPermissions(permissions);
         this.managedAttributes.add(name);
         return attribute;
+    }
+
+    @Test
+    public void testDefaultCharacterValidationOnUsername() {
+        List<String> invalidNames = List.of("1user\\\\", "2user\\\\%", "3user\\\\*", "4user\\\\_");
+
+        for (String invalidName : invalidNames) {
+            try {
+                createUser(invalidName, "test@invalid.org");
+                fail("Should fail because the username contains invalid characters");
+            } catch (WebApplicationException bre) {
+                assertEquals(400, bre.getResponse().getStatus());
+                ErrorRepresentation error = bre.getResponse().readEntity(ErrorRepresentation.class);
+                assertEquals("error-username-invalid-character", error.getErrorMessage());
+            }
+        }
     }
 
     @Override

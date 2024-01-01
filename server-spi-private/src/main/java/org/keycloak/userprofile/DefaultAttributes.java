@@ -29,11 +29,13 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.function.Consumer;
 import java.util.stream.Collectors;
-
+import org.jboss.logging.Logger;
+import org.keycloak.common.util.CollectionUtil;
 import org.keycloak.models.Constants;
 import org.keycloak.models.KeycloakSession;
 import org.keycloak.models.RealmModel;
 import org.keycloak.models.UserModel;
+import org.keycloak.models.utils.KeycloakModelUtils;
 import org.keycloak.validate.ValidationContext;
 import org.keycloak.validate.ValidationError;
 
@@ -50,6 +52,8 @@ import org.keycloak.validate.ValidationError;
  * @author <a href="mailto:psilva@redhat.com">Pedro Igor</a>
  */
 public class DefaultAttributes extends HashMap<String, List<String>> implements Attributes {
+
+    private static Logger logger = Logger.getLogger(DefaultAttributes.class);
 
     /**
      * To reference dynamic attributes that can be configured as read-only when setting up the provider.
@@ -142,6 +146,14 @@ public class DefaultAttributes extends HashMap<String, List<String>> implements 
                     continue;
                 }
 
+                if (user != null && metadata.isReadOnly(attributeContext)
+                        && CollectionUtil.collectionEquals(user.getAttributeStream(name).collect(Collectors.toList()), attribute.getValue())) {
+                    // allow update if the value was already wrong in the user and is read-only in this context
+                    logger.warnf("User '%s' attribute '%s' has previous validation errors %s but is read-only in context %s.",
+                            user.getUsername(), name, vc.getErrors(), attributeContext.getContext());
+                    continue;
+                }
+
                 if (result == null) {
                     result = false;
                 }
@@ -180,6 +192,12 @@ public class DefaultAttributes extends HashMap<String, List<String>> implements 
 
         for (String name : nameSet()) {
             AttributeMetadata metadata = getMetadata(name);
+            RealmModel realm = session.getContext().getRealm();
+
+            if (UserModel.USERNAME.equals(name)
+                    && realm.isRegistrationEmailAsUsername()) {
+                continue;
+            }
 
             if (metadata == null || !metadata.canEdit(createAttributeContext(metadata))) {
                 attributes.remove(name);
@@ -225,11 +243,11 @@ public class DefaultAttributes extends HashMap<String, List<String>> implements 
     }
 
     private AttributeContext createAttributeContext(Entry<String, List<String>> attribute, AttributeMetadata metadata) {
-        return new AttributeContext(context, session, attribute, user, metadata);
+        return new AttributeContext(context, session, attribute, user, metadata, this);
     }
 
     private AttributeContext createAttributeContext(String attributeName, AttributeMetadata metadata) {
-        return new AttributeContext(context, session, createAttribute(attributeName), user, metadata);
+        return new AttributeContext(context, session, createAttribute(attributeName), user, metadata, this);
     }
 
     protected AttributeContext createAttributeContext(AttributeMetadata metadata) {
@@ -297,6 +315,10 @@ public class DefaultAttributes extends HashMap<String, List<String>> implements 
                     values = (List<String>) value;
                 }
 
+                if (UserModel.USERNAME.equals(key) || UserModel.EMAIL.equals(key)) {
+                    values = values.stream().map(KeycloakModelUtils::toLowerCaseSafe).collect(Collectors.toList());
+                }
+
                 newAttributes.put(key, Collections.unmodifiableList(values));
             }
         }
@@ -330,7 +352,6 @@ public class DefaultAttributes extends HashMap<String, List<String>> implements 
         if (!email.isEmpty() && realm.isRegistrationEmailAsUsername()) {
             List<String> lowerCaseEmailList = email.stream()
                     .filter(Objects::nonNull)
-                    .map(String::toLowerCase)
                     .collect(Collectors.toList());
 
             setUserName(newAttributes, lowerCaseEmailList);

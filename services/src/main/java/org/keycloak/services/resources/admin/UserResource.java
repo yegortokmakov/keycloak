@@ -54,6 +54,7 @@ import org.keycloak.models.UserLoginFailureModel;
 import org.keycloak.models.UserManager;
 import org.keycloak.models.UserModel;
 import org.keycloak.models.UserSessionModel;
+import org.keycloak.models.light.LightweightUserAdapter;
 import org.keycloak.models.utils.ModelToRepresentation;
 import org.keycloak.models.utils.RepresentationToModel;
 import org.keycloak.models.utils.RoleUtils;
@@ -89,6 +90,7 @@ import org.keycloak.userprofile.AttributeValidatorMetadata;
 import org.keycloak.userprofile.UserProfile;
 import org.keycloak.userprofile.UserProfileProvider;
 import org.keycloak.userprofile.ValidationException;
+import org.keycloak.utils.GroupUtils;
 import org.keycloak.utils.ProfileHelper;
 
 import jakarta.ws.rs.BadRequestException;
@@ -128,6 +130,7 @@ import java.util.stream.Stream;
 
 import static org.keycloak.models.ImpersonationSessionNote.IMPERSONATOR_ID;
 import static org.keycloak.models.ImpersonationSessionNote.IMPERSONATOR_USERNAME;
+import static org.keycloak.services.resources.admin.UserProfileResource.createUserProfileMetadata;
 import static org.keycloak.userprofile.UserProfileContext.USER_API;
 import static org.keycloak.utils.LockObjectsForModification.lockUserSessionsForModification;
 
@@ -245,10 +248,8 @@ public class UserResource {
             profile.validate();
         } catch (ValidationException pve) {
             List<ErrorRepresentation> errors = new ArrayList<>();
-            AdminMessageFormatter adminMessageFormatter = createAdminMessageFormatter(session, adminAuth);
-
             for (ValidationException.Error error : pve.getErrors()) {
-                errors.add(new ErrorRepresentation(error.getFormattedMessage(adminMessageFormatter)));
+                errors.add(new ErrorRepresentation(error.getAttribute(), error.getMessage(), error.getMessageParameters()));
             }
 
             throw ErrorResponse.errors(errors, Status.BAD_REQUEST);
@@ -257,18 +258,12 @@ public class UserResource {
         return null;
     }
 
-    private static AdminMessageFormatter createAdminMessageFormatter(KeycloakSession session, AdminAuth adminAuth) {
-        // the authenticated user is used to resolve the locale for the messages. It can be null.
-        UserModel authenticatedUser = adminAuth == null ? null : adminAuth.getUser();
-
-        return new AdminMessageFormatter(session, authenticatedUser);
-    }
-
     public static void updateUserFromRep(UserProfile profile, UserModel user, UserRepresentation rep, KeycloakSession session, boolean isUpdateExistingUser) {
         boolean removeMissingRequiredActions = isUpdateExistingUser;
 
         if (rep.isEnabled() != null) user.setEnabled(rep.isEnabled());
         if (rep.isEmailVerified() != null) user.setEmailVerified(rep.isEmailVerified());
+        if (rep.getCreatedTimestamp() != null && !isUpdateExistingUser) user.setCreatedTimestamp(rep.getCreatedTimestamp());
 
         if (rep.getFederationLink() != null) user.setFederationLink(rep.getFederationLink());
 
@@ -336,7 +331,7 @@ public class UserResource {
         }
 
         if (userProfileMetadata) {
-            rep.setUserProfileMetadata(createUserProfileMetadata(profile));
+            rep.setUserProfileMetadata(createUserProfileMetadata(session, profile));
         }
 
         return rep;
@@ -522,7 +517,7 @@ public class UserResource {
         Set<ClientModel> offlineClients = new UserSessionManager(session).findClientsWithOfflineToken(realm, user);
 
         Set<ClientModel> clientsWithUserConsents = new HashSet<>();
-        List<UserConsentModel> userConsents = session.users().getConsentsStream(realm, user.getId())
+        List<UserConsentModel> userConsents = UserConsentManager.getConsentsStream(session, realm, user)
                  // collect clients with explicit user consents for later filtering
                 .peek(ucm -> clientsWithUserConsents.add(ucm.getClient()))
                 .collect(Collectors.toList());
@@ -614,7 +609,9 @@ public class UserResource {
     public void logout() {
         auth.users().requireManage(user);
 
-        session.users().setNotBeforeForUser(realm, user, Time.currentTime());
+        if (! LightweightUserAdapter.isLightweightUser(user)) {
+            session.users().setNotBeforeForUser(realm, user, Time.currentTime());
+        }
 
         session.sessions().getUserSessionsStream(realm, user)
                 .collect(Collectors.toList()) // collect to avoid concurrent modification as backchannelLogout removes the user sessions.
@@ -968,12 +965,7 @@ public class UserResource {
                                                        @QueryParam("max") Integer maxResults,
                                                        @QueryParam("briefRepresentation") @DefaultValue("true") boolean briefRepresentation) {
         auth.users().requireView(user);
-
-        if (Objects.nonNull(search)) {
-            return ModelToRepresentation.searchForGroupByName(user, !briefRepresentation, search.trim(), firstResult, maxResults);
-        } else {
-            return ModelToRepresentation.toGroupHierarchy(user, !briefRepresentation, firstResult, maxResults);
-        }
+        return user.getGroupsStream(search, firstResult, maxResults).map(g -> ModelToRepresentation.toRepresentation(g, !briefRepresentation));
     }
 
     @GET

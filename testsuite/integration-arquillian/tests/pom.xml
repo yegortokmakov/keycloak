@@ -24,7 +24,7 @@
     <parent>
         <groupId>org.keycloak.testsuite</groupId>
         <artifactId>integration-arquillian</artifactId>
-        <version>999.0.0-SNAPSHOT</version>
+        <version>23.0.3</version>
     </parent>
 
     <packaging>pom</packaging>
@@ -1534,6 +1534,8 @@
                                     <auth.server.migration>true</auth.server.migration>
                                     <keycloak.migration.home>${containers.home}/auth-server-migration</keycloak.migration.home>
                                     <migration.import.props.previous>${migration.import.props.previous}</migration.import.props.previous>
+                                    <auth.server.feature>${auth.server.feature}</auth.server.feature>
+                                    <auth.server.feature>declarative-user-profile</auth.server.feature>
                                 </systemPropertyVariables>
                             </configuration>
                         </plugin>
